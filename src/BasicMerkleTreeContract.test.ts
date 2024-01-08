@@ -5,29 +5,56 @@ import {
   MerkleWitness,
   Mina,
   PrivateKey,
+  PublicKey,
 } from 'o1js';
 import { BasicMerkleTreeContract } from './BasicMerkleTreeContract';
 
 let proofsEnabled = false;
 
 describe('BasicMerkleTreeContract.js', () => {
+  /* let deployerAccount: PublicKey,
+    deployerKey: PrivateKey,
+    senderAccount: PublicKey,
+    senderKey: PrivateKey,
+    zkAppAddress: PublicKey,
+    zkAppPrivateKey: PrivateKey,
+    zkApp: BasicMerkleTreeContract;
+
+  beforeAll(() => {
+    const Local = Mina.LocalBlockchain({ proofsEnabled });
+    Mina.setActiveInstance(Local);
+    ({ privateKey: deployerKey, publicKey: deployerAccount } =
+      Local.testAccounts[0]);
+    ({ privateKey: senderKey, publicKey: senderAccount } =
+      Local.testAccounts[1]);
+    zkAppPrivateKey = PrivateKey.random();
+    zkAppAddress = zkAppPrivateKey.toPublicKey();
+    zkApp = new BasicMerkleTreeContract(zkAppAddress);
+  }); */
+
+  let deployerAccount: PublicKey,
+    deployerKey: PrivateKey,
+    senderAccount: PublicKey,
+    senderKey: PrivateKey,
+    zkAppAddress: PublicKey,
+    zkAppPrivateKey: PrivateKey,
+    zkApp: BasicMerkleTreeContract;
+
+  beforeAll(() => {
+    const Local = Mina.LocalBlockchain({ proofsEnabled });
+    Mina.setActiveInstance(Local);
+    ({ privateKey: deployerKey, publicKey: deployerAccount } =
+      Local.testAccounts[0]);
+    ({ privateKey: senderKey, publicKey: senderAccount } =
+      Local.testAccounts[1]);
+
+    zkAppPrivateKey = PrivateKey.random();
+    zkAppAddress = zkAppPrivateKey.toPublicKey();
+    zkApp = new BasicMerkleTreeContract(zkAppAddress);
+  });
+
   describe('BasicMerkleTreeContract()', () => {
-    it('aaa', async () => {
-      const Local = Mina.LocalBlockchain({ proofsEnabled });
-      Mina.setActiveInstance(Local);
-      const { privateKey: deployerKey, publicKey: deployerAccount } =
-        Local.testAccounts[0];
-      const { privateKey: senderPrivateKey, publicKey: senderPublicKey } =
-        Local.testAccounts[1];
-
-      const zkAppPrivateKey = PrivateKey.random();
-      const zkAppPublicKey = zkAppPrivateKey.toPublicKey();
-
-      const basicTreeZkAppPrivateKey = PrivateKey.random();
-      const basicTreeZkAppAddress = basicTreeZkAppPrivateKey.toPublicKey();
-
-      // initialize the zkapp
-      const zkApp = new BasicMerkleTreeContract(basicTreeZkAppAddress);
+    it('original', async () => {
       if (proofsEnabled) await BasicMerkleTreeContract.compile();
 
       // create a new tree
@@ -43,15 +70,9 @@ describe('BasicMerkleTreeContract.js', () => {
         zkApp.initState(tree.getRoot());
       });
       await deployTxn.prove();
-      deployTxn.sign([deployerKey, basicTreeZkAppPrivateKey]);
+      deployTxn.sign([deployerKey, zkAppPrivateKey]);
 
-      const pendingDeployTx = await deployTxn.send();
-      /**
-       * `txn.send()` returns a pending transaction with two methods - `.wait()` and `.hash()`
-       * `.hash()` returns the transaction hash
-       * `.wait()` automatically resolves once the transaction has been included in a block. this is redundant for the LocalBlockchain, but very helpful for live testnets
-       */
-      //await pendingDeployTx.wait();
+      await deployTxn.send();
 
       const incrementIndex = 522n;
       const incrementAmount = Field(9);
@@ -63,7 +84,7 @@ describe('BasicMerkleTreeContract.js', () => {
       tree.setLeaf(incrementIndex, incrementAmount);
 
       // update the smart contract
-      const txn1 = await Mina.transaction(senderPublicKey, () => {
+      const txn1 = await Mina.transaction(senderAccount, () => {
         zkApp.update(
           witness,
           Field(0), // leafs in new trees start at a state of 0
@@ -71,9 +92,7 @@ describe('BasicMerkleTreeContract.js', () => {
         );
       });
       await txn1.prove();
-      const pendingTx = await txn1
-        .sign([senderPrivateKey, zkAppPrivateKey])
-        .send();
+      const pendingTx = await txn1.sign([senderKey, zkAppPrivateKey]).send();
       await pendingTx.wait();
 
       // compare the root of the smart contract tree to our local tree
