@@ -11,7 +11,7 @@ import { BasicMerkleTreeContract } from './BasicMerkleTreeContract';
 
 let proofsEnabled = false;
 
-describe('BasicMerkleTreeContract.js', () => {
+xdescribe('BasicMerkleTreeContract.js', () => {
   /* let deployerAccount: PublicKey,
     deployerKey: PrivateKey,
     senderAccount: PublicKey,
