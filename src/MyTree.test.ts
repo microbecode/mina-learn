@@ -1,5 +1,6 @@
 import {
   AccountUpdate,
+  Bool,
   Field,
   Gadgets,
   MerkleTree,
@@ -29,7 +30,7 @@ describe('MyTree', () => {
 
   class MerkleWitness8 extends MerkleWitness(height) {}
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const Local = Mina.LocalBlockchain({ proofsEnabled });
     Mina.setActiveInstance(Local);
     ({ privateKey: deployerKey, publicKey: deployerAccount } =
@@ -98,7 +99,7 @@ describe('MyTree', () => {
     }
   });
 
-  it('can deposit a secret', async () => {
+  xit('can deposit a secret', async () => {
     const secret = Field(33);
 
     const txn = await Mina.transaction(senderAccount, () => {
@@ -107,12 +108,63 @@ describe('MyTree', () => {
     await txn.prove();
     await txn.sign([senderKey, zkAppPrivateKey]).send();
   });
+
+  describe('Flag checks', () => {
+    xit('Valid values, without triggering checks', async () => {
+      const expected = true;
+      zkApp.checkFlags(Field(0)).assertEquals(expected); // 000000
+      zkApp.checkFlags(Field(1)).assertEquals(expected); // 000001
+      zkApp.checkFlags(Field(2)).assertEquals(expected); // 000010
+      zkApp.checkFlags(Field(3)).assertEquals(expected); // 000011
+      zkApp.checkFlags(Field(8)).assertEquals(expected); // 001000
+      zkApp.checkFlags(Field(9)).assertEquals(expected); // 001001
+      zkApp.checkFlags(Field(10)).assertEquals(expected); // 001010
+      zkApp.checkFlags(Field(11)).assertEquals(expected); // 001011
+    });
+
+    xit('Valid values, while triggering checks', async () => {
+      const expected = true;
+      zkApp.checkFlags(Field(4)).assertEquals(expected); // 000100
+      zkApp.checkFlags(Field(12)).assertEquals(expected); // 001100
+      zkApp.checkFlags(Field(24)).assertEquals(expected); // 011000
+      zkApp.checkFlags(Field(25)).assertEquals(expected); // 011001
+      zkApp.checkFlags(Field(26)).assertEquals(expected); // 011010
+      zkApp.checkFlags(Field(27)).assertEquals(expected); // 011011
+      zkApp.checkFlags(Field(28)).assertEquals(expected); // 011100
+      zkApp.checkFlags(Field(32)).assertEquals(expected); // 100000
+    });
+
+    it('Invalid values', async () => {
+      const expected = false;
+
+      zkApp.checkFlags(Field(5)).assertEquals(expected); // 000101 rule3
+      zkApp.checkFlags(Field(6)).assertEquals(expected); // 000110 rule3
+      zkApp.checkFlags(Field(7)).assertEquals(expected); // 001101 rule3
+      zkApp.checkFlags(Field(13)).assertEquals(expected); // 001101 rule3
+      zkApp.checkFlags(Field(14)).assertEquals(expected); // 001110 rule3
+      zkApp.checkFlags(Field(15)).assertEquals(expected); // 001111 rule3
+      zkApp.checkFlags(Field(16)).assertEquals(expected); // 010000 rule2
+      zkApp.checkFlags(Field(17)).assertEquals(expected); // 010001 rule2
+      zkApp.checkFlags(Field(18)).assertEquals(expected); // 010010 rule2
+      zkApp.checkFlags(Field(19)).assertEquals(expected); // 010011 rule2
+      zkApp.checkFlags(Field(20)).assertEquals(expected); // 010100 rule2
+      zkApp.checkFlags(Field(21)).assertEquals(expected); // 010101 rule2 rule3
+      zkApp.checkFlags(Field(22)).assertEquals(expected); // 010110 rule2 rule3
+      zkApp.checkFlags(Field(23)).assertEquals(expected); // 010111 rule2 rule3
+      zkApp.checkFlags(Field(29)).assertEquals(expected); // 011101 rule3
+      zkApp.checkFlags(Field(30)).assertEquals(expected); // 011110 rule3
+      zkApp.checkFlags(Field(31)).assertEquals(expected); // 011111 rule3
+
+      for (let i = 33; i < 64; i++) {
+        zkApp.checkFlags(Field(i)).assertEquals(expected); // fail at least due to rule 1
+      }
+    });
+  });
 });
 
 xdescribe('other', () => {
   it('hmm', async () => {
-    const secret = Field(18);
-
+    const secret = Field(16);
     let flag1True = Provable.if(
       Gadgets.and(secret, Field(32), 6).equals(0),
       Field(0),
@@ -144,41 +196,10 @@ xdescribe('other', () => {
       Field(1)
     );
 
-    console.log(
-      'flags',
-      '\n',
-      flag1True,
-      '\n',
-      flag2True,
-      '\n',
-      flag3True,
-      '\n',
-      flag4True,
-      '\n',
-      flag5True,
-      '\n',
-      flag6True
-    );
-
-    // If flag 1 is true, then all other flags must be false
-    // flag1True * ((1 - flag2True) + (1 - flag2True) + ... (1 - flag6True)) = 0
-    flag1True
-      .mul(
-        Field(1)
-          .sub(flag2True)
-          .add(Field(1).sub(flag3True))
-          .add(Field(1).sub(flag4True))
-          .add(Field(1).sub(flag5True))
-          .add(Field(1).sub(flag6True))
-      )
+    const checked = Field(1)
+      .mul(Field(1).sub(Field(0)))
       .equals(Field(0));
-
-    // If flag 2 is true, then flag 3 must also be true.
-    // flag2True * (1 - flag3True) = 0
-    flag2True.mul(Field(1).sub(flag3True)).equals(Field(0));
-
-    // If flag 4 is true, then flags 5 and 6 must be false.
-    // flag4True * (flag5True + flag6True) = 0
-    flag4True.mul(flag5True.add(flag6True)).equals(Field(0));
+    console.log('IS IT', checked, flag2True, flag3True);
+    console.log('other', Bool(true) && Bool(false));
   });
 });

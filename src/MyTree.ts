@@ -10,6 +10,7 @@ import {
   circuitMain,
   Circuit,
   Provable,
+  Bool,
 } from 'o1js';
 
 class MerkleWitness8 extends MerkleWitness(8) {}
@@ -46,6 +47,17 @@ export class MyTree extends SmartContract {
   }
 
   @method deposit(secret: Field) {
+    const flags = this.checkFlags(secret);
+    flags.assertTrue('Invalid flags');
+
+    const received = this.messagesReceived.get();
+    this.messagesReceived.requireEquals(received);
+    this.messagesReceived.set(received.add(1));
+
+    this.emitEvent('message-received', secret);
+  }
+
+  @method checkFlags(secret: Field): Bool {
     let flag1True = Provable.if(
       Gadgets.and(secret, Field(32), 6).equals(0),
       Field(0),
@@ -78,30 +90,21 @@ export class MyTree extends SmartContract {
     );
 
     // If flag 1 is true, then all other flags must be false
-    // flag1True * ((1 - flag2True) + (1 - flag2True) + ... (1 - flag6True)) = 0
-    flag1True
+    // flag1True * ( flag2True + flag2True + ... flag6True) = 0
+    const check1 = flag1True
       .mul(
-        Field(1)
-          .sub(flag2True)
-          .add(Field(1).sub(flag3True))
-          .add(Field(1).sub(flag4True))
-          .add(Field(1).sub(flag5True))
-          .add(Field(1).sub(flag6True))
+        flag2True.add(flag3True).add(flag4True).add(flag5True).add(flag6True)
       )
       .equals(Field(0));
 
     // If flag 2 is true, then flag 3 must also be true.
     // flag2True * (1 - flag3True) = 0
-    flag2True.mul(Field(1).sub(flag3True)).equals(Field(0));
+    const check2 = flag2True.mul(Field(1).sub(flag3True)).equals(Field(0));
 
     // If flag 4 is true, then flags 5 and 6 must be false.
     // flag4True * (flag5True + flag6True) = 0
-    flag4True.mul(flag5True.add(flag6True)).equals(Field(0));
+    const check3 = flag4True.mul(flag5True.add(flag6True)).equals(Field(0));
 
-    const received = this.messagesReceived.get();
-    this.messagesReceived.requireEquals(received);
-    this.messagesReceived.set(received.add(1));
-
-    this.emitEvent('message-received', secret);
+    return check1.and(check2).and(check3);
   }
 }
