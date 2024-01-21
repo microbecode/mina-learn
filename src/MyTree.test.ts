@@ -16,9 +16,7 @@ import { MyTree } from './MyTree';
 let proofsEnabled = false;
 
 describe('MyTree', () => {
-  let deployerAccount: PublicKey,
-    deployerKey: PrivateKey,
-    senderAccount: PublicKey,
+  let senderAccount: PublicKey,
     senderKey: PrivateKey,
     zkAppAddress: PublicKey,
     zkAppPrivateKey: PrivateKey,
@@ -35,10 +33,13 @@ describe('MyTree', () => {
   beforeAll(async () => {
     const Local = Mina.LocalBlockchain({ proofsEnabled });
     Mina.setActiveInstance(Local);
+    let deployerKey, deployerAccount: PublicKey;
+
     ({ privateKey: deployerKey, publicKey: deployerAccount } =
       Local.testAccounts[0]);
     ({ privateKey: senderKey, publicKey: senderAccount } =
       Local.testAccounts[1]);
+
     while (privateKeys.length < 100) {
       for (let i = 0; i < 9; i++) {
         privateKeys.push(Local.testAccounts[i].privateKey);
@@ -67,7 +68,7 @@ describe('MyTree', () => {
     await deployTxn.send();
   });
 
-  xit('can store a hundred values locally', async () => {
+  it('can store a hundred values locally', async () => {
     class MerkleWitness8 extends MerkleWitness(8) {}
     let tree = new MerkleTree(height);
     const publicKeys: PublicKey[] = [];
@@ -95,7 +96,7 @@ describe('MyTree', () => {
     }
   });
 
-  xit('can store a hundred values in the contract', async () => {
+  it('can store a hundred values in the contract', async () => {
     const publicKeys: PublicKey[] = [];
 
     for (let i = 0; i < 100; i++) {
@@ -105,12 +106,11 @@ describe('MyTree', () => {
       const hash = Poseidon.hash(publicKey.toFields());
 
       const txn = await Mina.transaction(senderAccount, () => {
-        //const newValue = Field(i + 1);
         tree.setLeaf(BigInt(i), hash);
 
         let witness = new MerkleWitness8(tree.getWitness(BigInt(i)));
 
-        zkApp.addValue(witness, hash);
+        zkApp.addAddress(witness, hash);
       });
       await txn.prove();
       await txn.sign([senderKey, zkAppPrivateKey]).send();
@@ -120,7 +120,7 @@ describe('MyTree', () => {
   });
 
   describe('Secret storage', () => {
-    const rounds = 3;
+    const rounds = 100;
     beforeAll(async () => {
       // Add values to tree
       for (let i = 0; i < rounds; i++) {
@@ -132,7 +132,7 @@ describe('MyTree', () => {
           tree.setLeaf(BigInt(i), hash);
 
           let witness = new MerkleWitness8(tree.getWitness(BigInt(i)));
-          zkApp.addValue(witness, hash);
+          zkApp.addAddress(witness, hash);
         });
         await txn.prove();
         await txn.sign([senderKey]).send();
@@ -141,8 +141,8 @@ describe('MyTree', () => {
       }
     });
 
-    it('can deposit a secret', async () => {
-      const secret = Field(533);
+    it('can deposit a secret but only once', async () => {
+      const secret = Field(28);
 
       let witness = new MerkleWitness8(tree.getWitness(1n));
       const useKey = privateKeys[1];
@@ -152,10 +152,20 @@ describe('MyTree', () => {
       });
       await txn.prove();
       await txn.sign([useKey]).send();
+
+      try {
+        await Mina.transaction(useKey.toPublicKey(), () => {
+          zkApp.deposit(witness, secret);
+        });
+      } catch (e) {
+        // Should throw so this is ok
+        return;
+      }
+      throw 'Should fail';
     });
 
-    xit('fails for non-added address', async () => {
-      const secret = Field(533);
+    it('fails for non-added address', async () => {
+      const secret = Field(28);
 
       let witness = new MerkleWitness8(tree.getWitness(1n));
       try {
@@ -170,7 +180,7 @@ describe('MyTree', () => {
     });
   });
 
-  xdescribe('Flag checks', () => {
+  describe('Flag checks', () => {
     it('Valid values, without triggering checks', async () => {
       const expected = true;
       zkApp.checkFlags(Field(0)).assertEquals(expected); // 000000
@@ -220,47 +230,5 @@ describe('MyTree', () => {
         zkApp.checkFlags(Field(i)).assertEquals(expected); // fail at least due to rule 1
       }
     });
-  });
-});
-
-xdescribe('other', () => {
-  it('hmm', async () => {
-    const secret = Field(16);
-    let flag1True = Provable.if(
-      Gadgets.and(secret, Field(32), 6).equals(0),
-      Field(0),
-      Field(1)
-    );
-    let flag2True = Provable.if(
-      Gadgets.and(secret, Field(16), 5).equals(0),
-      Field(0),
-      Field(1)
-    );
-    let flag3True = Provable.if(
-      Gadgets.and(secret, Field(8), 4).equals(0),
-      Field(0),
-      Field(1)
-    );
-    let flag4True = Provable.if(
-      Gadgets.and(secret, Field(4), 3).equals(0),
-      Field(0),
-      Field(1)
-    );
-    let flag5True = Provable.if(
-      Gadgets.and(secret, Field(2), 20).equals(0),
-      Field(0),
-      Field(1)
-    );
-    let flag6True = Provable.if(
-      Gadgets.and(secret, Field(1), 1).equals(0),
-      Field(0),
-      Field(1)
-    );
-
-    const checked = Field(1)
-      .mul(Field(1).sub(Field(0)))
-      .equals(Field(0));
-    console.log('IS IT', checked, flag2True, flag3True);
-    console.log('other', Bool(true) && Bool(false));
   });
 });

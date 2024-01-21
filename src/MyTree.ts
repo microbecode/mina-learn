@@ -18,6 +18,7 @@ class MerkleWitness8 extends MerkleWitness(8) {}
 
 export class MyTree extends SmartContract {
   @state(Field) treeRoot = State<Field>();
+  @state(Field) savedMessages = State<Field>();
   @state(Field) messagesReceived = State<Field>();
 
   events = {
@@ -28,7 +29,7 @@ export class MyTree extends SmartContract {
     this.treeRoot.set(initialRoot);
   }
 
-  @method addValue(leafWitness: MerkleWitness8, valueAfter: Field) {
+  @method addAddress(leafWitness: MerkleWitness8, valueAfter: Field) {
     const rootNow = this.treeRoot.get();
     this.treeRoot.requireEquals(rootNow);
 
@@ -43,20 +44,35 @@ export class MyTree extends SmartContract {
     const rootNow = this.treeRoot.get();
     this.treeRoot.requireEquals(rootNow);
 
+    // Make sure the sender is in the tree
     const sender = this.sender;
-    Provable.log('Sender', sender);
     const hash = Poseidon.hash(sender.toFields());
-    const computedRoot = leafWitness.calculateRoot(hash);
+    let computedRoot = leafWitness.calculateRoot(hash);
     computedRoot.assertEquals(rootNow, 'invalid root 1');
 
-    const flags = this.checkFlags(secret);
+    // Remove address so they can't deposit anymore
+    const empty = Field(0);
+    const rootAfter = leafWitness.calculateRoot(empty);
+    // set the new root
+    this.treeRoot.set(rootAfter);
 
+    // Check flags
+    const flags = this.checkFlags(secret);
     flags.assertTrue('Invalid flags');
 
+    // Store message. Since it's not accessed ever, we can store it in any format. Hashing with previous is ok.
+    const newMessage = Poseidon.hash([
+      this.savedMessages.getAndRequireEquals(),
+      secret,
+    ]);
+    this.savedMessages.set(newMessage);
+
+    // Increment counter
     const received = this.messagesReceived.get();
     this.messagesReceived.requireEquals(received);
     this.messagesReceived.set(received.add(1));
 
+    // Emit event
     this.emitEvent('message-received', secret);
   }
 
