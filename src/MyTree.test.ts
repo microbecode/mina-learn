@@ -27,7 +27,7 @@ describe('MyTree', () => {
   let validPrivateKey: PrivateKey; // key that is valid but not added to tree
 
   const height = 8;
-  const rounds = 10;
+  const rounds = 100;
 
   class MerkleWitness8 extends MerkleWitness(height) {}
 
