@@ -1,3 +1,3 @@
-import { Add } from './Add.js';
+import { MyTree } from './MyTree.js';
 
-export { Add };
+export { MyTree };

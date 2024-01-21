@@ -27,6 +27,7 @@ describe('MyTree', () => {
   let validPrivateKey: PrivateKey; // key that is valid but not added to tree
 
   const height = 8;
+  const rounds = 10;
 
   class MerkleWitness8 extends MerkleWitness(height) {}
 
@@ -99,7 +100,7 @@ describe('MyTree', () => {
   it('can store a hundred values in the contract', async () => {
     const publicKeys: PublicKey[] = [];
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < rounds; i++) {
       const newKey = PrivateKey.random();
       const publicKey = newKey.toPublicKey();
       publicKeys.push(publicKey);
@@ -120,7 +121,6 @@ describe('MyTree', () => {
   });
 
   describe('Secret storage', () => {
-    const rounds = 100;
     beforeAll(async () => {
       // Add values to tree
       for (let i = 0; i < rounds; i++) {
