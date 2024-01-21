@@ -11,6 +11,7 @@ import {
   Circuit,
   Provable,
   Bool,
+  Poseidon,
 } from 'o1js';
 
 class MerkleWitness8 extends MerkleWitness(8) {}
@@ -27,17 +28,9 @@ export class MyTree extends SmartContract {
     this.treeRoot.set(initialRoot);
   }
 
-  @method addValue(
-    leafWitness: MerkleWitness8,
-    valueBefore: Field,
-    valueAfter: Field
-  ) {
-    const initialRoot = this.treeRoot.get();
-    this.treeRoot.requireEquals(initialRoot);
-
-    // check the initial state matches what we expect
-    const rootBefore = leafWitness.calculateRoot(valueBefore);
-    rootBefore.assertEquals(initialRoot);
+  @method addValue(leafWitness: MerkleWitness8, valueAfter: Field) {
+    const rootNow = this.treeRoot.get();
+    this.treeRoot.requireEquals(rootNow);
 
     // compute the root after incrementing
     const rootAfter = leafWitness.calculateRoot(valueAfter);
@@ -46,8 +39,18 @@ export class MyTree extends SmartContract {
     this.treeRoot.set(rootAfter);
   }
 
-  @method deposit(secret: Field) {
+  @method deposit(leafWitness: MerkleWitness8, secret: Field) {
+    const rootNow = this.treeRoot.get();
+    this.treeRoot.requireEquals(rootNow);
+
+    const sender = this.sender;
+    Provable.log('Sender', sender);
+    const hash = Poseidon.hash(sender.toFields());
+    const computedRoot = leafWitness.calculateRoot(hash);
+    computedRoot.assertEquals(rootNow, 'invalid root 1');
+
     const flags = this.checkFlags(secret);
+
     flags.assertTrue('Invalid flags');
 
     const received = this.messagesReceived.get();

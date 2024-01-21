@@ -25,6 +25,8 @@ describe('MyTree', () => {
     zkApp: MyTree;
 
   let tree: MerkleTree;
+  const privateKeys: PrivateKey[] = [];
+  let validPrivateKey: PrivateKey; // key that is valid but not added to tree
 
   const height = 8;
 
@@ -37,6 +39,12 @@ describe('MyTree', () => {
       Local.testAccounts[0]);
     ({ privateKey: senderKey, publicKey: senderAccount } =
       Local.testAccounts[1]);
+    while (privateKeys.length < 100) {
+      for (let i = 0; i < 9; i++) {
+        privateKeys.push(Local.testAccounts[i].privateKey);
+      }
+    }
+    validPrivateKey = Local.testAccounts[9].privateKey;
 
     zkAppPrivateKey = PrivateKey.random();
     zkAppAddress = zkAppPrivateKey.toPublicKey();
@@ -62,35 +70,47 @@ describe('MyTree', () => {
   xit('can store a hundred values locally', async () => {
     class MerkleWitness8 extends MerkleWitness(8) {}
     let tree = new MerkleTree(height);
+    const publicKeys: PublicKey[] = [];
     for (let i = 0; i < 100; i++) {
-      const newValue = Field(i + 1);
-      tree.setLeaf(BigInt(i), newValue);
+      const newKey = PrivateKey.random();
+      const publicKey = newKey.toPublicKey();
+      publicKeys.push(publicKey);
+      const hash = Poseidon.hash(publicKey.toFields());
+      //const newValue = Field(i + 1);
+      tree.setLeaf(BigInt(i), hash);
     }
     {
       let witness = new MerkleWitness8(tree.getWitness(7n));
-      const computedRoot = witness.calculateRoot(Field(8));
+      const foundKey = publicKeys[7];
+      const hash = Poseidon.hash(foundKey.toFields());
+      const computedRoot = witness.calculateRoot(hash);
       computedRoot.assertEquals(tree.getRoot(), 'invalid root 1');
     }
     {
       let witness = new MerkleWitness8(tree.getWitness(57n));
-      const computedRoot = witness.calculateRoot(Field(58));
+      const foundKey = publicKeys[57];
+      const hash = Poseidon.hash(foundKey.toFields());
+      const computedRoot = witness.calculateRoot(hash);
       computedRoot.assertEquals(tree.getRoot(), 'invalid root 2');
     }
   });
 
   xit('can store a hundred values in the contract', async () => {
-    for (let i = 0; i < 3; i++) {
+    const publicKeys: PublicKey[] = [];
+
+    for (let i = 0; i < 100; i++) {
+      const newKey = PrivateKey.random();
+      const publicKey = newKey.toPublicKey();
+      publicKeys.push(publicKey);
+      const hash = Poseidon.hash(publicKey.toFields());
+
       const txn = await Mina.transaction(senderAccount, () => {
-        const newValue = Field(i + 1);
-        tree.setLeaf(BigInt(i), newValue);
+        //const newValue = Field(i + 1);
+        tree.setLeaf(BigInt(i), hash);
 
         let witness = new MerkleWitness8(tree.getWitness(BigInt(i)));
 
-        zkApp.addValue(
-          witness,
-          Field(0), // leafs in new trees start at a state of 0
-          newValue
-        );
+        zkApp.addValue(witness, hash);
       });
       await txn.prove();
       await txn.sign([senderKey, zkAppPrivateKey]).send();
@@ -99,18 +119,59 @@ describe('MyTree', () => {
     }
   });
 
-  xit('can deposit a secret', async () => {
-    const secret = Field(33);
+  describe('Secret storage', () => {
+    const rounds = 3;
+    beforeAll(async () => {
+      // Add values to tree
+      for (let i = 0; i < rounds; i++) {
+        let publicKey = privateKeys[i].toPublicKey();
 
-    const txn = await Mina.transaction(senderAccount, () => {
-      zkApp.deposit(secret);
+        const hash = Poseidon.hash(publicKey.toFields());
+
+        const txn = await Mina.transaction(senderAccount, () => {
+          tree.setLeaf(BigInt(i), hash);
+
+          let witness = new MerkleWitness8(tree.getWitness(BigInt(i)));
+          zkApp.addValue(witness, hash);
+        });
+        await txn.prove();
+        await txn.sign([senderKey]).send();
+
+        zkApp.treeRoot.get().assertEquals(tree.getRoot(), 'not matching roots');
+      }
     });
-    await txn.prove();
-    await txn.sign([senderKey, zkAppPrivateKey]).send();
+
+    it('can deposit a secret', async () => {
+      const secret = Field(533);
+
+      let witness = new MerkleWitness8(tree.getWitness(1n));
+      const useKey = privateKeys[1];
+
+      const txn = await Mina.transaction(useKey.toPublicKey(), () => {
+        zkApp.deposit(witness, secret);
+      });
+      await txn.prove();
+      await txn.sign([useKey]).send();
+    });
+
+    xit('fails for non-added address', async () => {
+      const secret = Field(533);
+
+      let witness = new MerkleWitness8(tree.getWitness(1n));
+      try {
+        await Mina.transaction(validPrivateKey.toPublicKey(), () => {
+          zkApp.deposit(witness, secret);
+        });
+      } catch (e) {
+        // ok
+        return;
+      }
+      throw 'Should fail';
+    });
   });
 
-  describe('Flag checks', () => {
-    xit('Valid values, without triggering checks', async () => {
+  xdescribe('Flag checks', () => {
+    it('Valid values, without triggering checks', async () => {
       const expected = true;
       zkApp.checkFlags(Field(0)).assertEquals(expected); // 000000
       zkApp.checkFlags(Field(1)).assertEquals(expected); // 000001
@@ -122,7 +183,7 @@ describe('MyTree', () => {
       zkApp.checkFlags(Field(11)).assertEquals(expected); // 001011
     });
 
-    xit('Valid values, while triggering checks', async () => {
+    it('Valid values, while triggering checks', async () => {
       const expected = true;
       zkApp.checkFlags(Field(4)).assertEquals(expected); // 000100
       zkApp.checkFlags(Field(12)).assertEquals(expected); // 001100
